@@ -7,12 +7,15 @@ import "@openzeppelin/contracts-ethereum-package/contracts/utils/ReentrancyGuard
 import "../interfaces/IERC20.sol";
 import "../interfaces/IStrategy.sol";
 import "../interfaces/IWorker.sol";
-import "../../utils/SafeToken.sol";
 import "../library/SafeMathLib.sol";
 import "../library/FullMath.sol";
 import "../library/TickMath.sol";
 import "../library/FixedPoint96.sol";
 
+import "../../utils/SafeToken.sol";
+
+import "../interfaces/IAggregatorV3Interface.sol";
+import "../interfaces/IFlagInterface.sol";
 import "../interfaces/univ3/IUniswapV3Pool.sol";
 import "../interfaces/univ3/IUniswapV3Factory.sol";
 import "../interfaces/univ3/ISwapRouter.sol";
@@ -48,6 +51,12 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
   IStrategy public addStrat;
   IStrategy public liqStrat;
 
+  // Mapping from token0, token1 to source
+  mapping(address => mapping(address => IAggregatorV3Interface)) public priceFeeds;
+  address public usd;
+  address private FLAG_ARBITRUM_SEQ_OFFLINE;
+  FlagsInterface internal chainlinkFlags;
+
   function initialize(
     address _operator,
     address _baseToken,
@@ -57,7 +66,8 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
     IStrategy _liqStrat,
     uint24 _fee,
     uint32 _twapDuration,
-    IUniswapV3Factory _factory
+    IUniswapV3Factory _factory,
+    address _chainlinkFlags
   ) public initializer {
     OwnableUpgradeSafe.__Ownable_init();
     ReentrancyGuardUpgradeSafe.__ReentrancyGuard_init();
@@ -77,6 +87,11 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
     liqStrat = _liqStrat;
     okStrats[address(addStrat)] = true;
     okStrats[address(liqStrat)] = true;
+
+    FLAG_ARBITRUM_SEQ_OFFLINE = address(bytes20(bytes32(uint256(keccak256("chainlink.flags.arbitrum-seq-offline")) - 1)));
+    // 0x491B1dDA0A8fa069bbC1125133A975BF4e85a91b
+    chainlinkFlags = FlagsInterface(_chainlinkFlags);
+    usd = address(0xEeeeeeeEEEeEEeeEEeeEEeEEEEEeeEEEeeEeEeed);
   }
 
   function setParams(
@@ -141,36 +156,24 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
   function health(uint256 id) external override view returns (uint256) {
     uint256 positions = shares[id];
 
-    address token0 = IUniswapV3Pool(pool).token0();
-    address token1 = IUniswapV3Pool(pool).token1();
-    uint256 token0Decimal = IERC20(token0).decimals();
-    uint256 token1Decimal = IERC20(token1).decimals();
+    uint256 token0Decimal = IERC20(baseToken).decimals();
+    uint256 token1Decimal = IERC20(farmToken).decimals();
 
-    uint256 price0 = getPrice(token0, token1);
-    uint256 receiveBaseAmount = 0;
+    uint256 price0 = getLastPrice(baseToken, farmToken);
     // farmToken -> baseToken
-    if (farmToken == token0) {
-      uint256 amount = SafeMathLib.mul(price0, positions);
-      uint256 decimal = SafeMathLib.sub(18, token0Decimal);
-      uint256 value = SafeMathLib.div(amount, 10**decimal);
-      receiveBaseAmount = SafeMathLib.div(value, 10**token0Decimal);
-    } else if (farmToken == token1) {
-      uint256 decimal = SafeMathLib.sub(18, token0Decimal);
-      uint256 price0_ = SafeMathLib.div(price0, 10**decimal);
-      uint256 price1 = SafeMathLib.mul(SafeMathLib.div(1e36, price0), 10**token1Decimal);
-      uint256 amount = SafeMathLib.mul(price1, positions);
-      receiveBaseAmount = SafeMathLib.div(SafeMathLib.div(amount, 10**token1Decimal), 1e18);
-    }
+    uint256 amount = SafeMathLib.mul(price0, positions);
+    uint256 receiveBaseAmount = SafeMathLib.div(amount, 10**token1Decimal);
     return receiveBaseAmount;
   }
 
   /// @dev Liquidate the given position by converting it to BaseToken and return back to caller.
   /// @param id The position ID to perform liquidation
-  /// @param swapData Swap token data in the DODO protocol.
-  function liquidateWithData(uint256 id, bytes calldata swapData) external override onlyOperator nonReentrant {
+  /// @param data Swap token data in the dex protocol.
+  function liquidateWithData(uint256 id, bytes calldata data) external override onlyOperator nonReentrant {
 
+    (uint256 closeShare, bytes memory swapData) = abi.decode(data, (uint256, bytes));
     // 1. Convert the position back to LP tokens and use liquidate strategy.
-    _removeShare(id);
+    _removeShare(id, closeShare);
 
     farmToken.safeTransfer(address(liqStrat), farmToken.balanceOf(address(this)));
     liqStrat.executeWithData(address(0), 0, abi.encode(baseToken, farmToken, 0), swapData);
@@ -182,7 +185,7 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
     emit Liquidate(id, wad);
   }
 
-  /// @dev Internal function to stake all outstanding LP tokens to the given position ID.
+  /// @dev Internal function to stake all outstanding farm tokens to the given position ID.
   function _addShare(uint256 id) internal {
     uint256 balance = farmToken.balanceOf(address(this));
     if (balance > 0) {
@@ -210,6 +213,20 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
       totalShare = SafeMathLib.sub(totalShare, share, "worker:totalShare");
       shares[id] = 0;
       emit RemoveShare(id, share);
+    }
+  }
+
+  /// @dev Internal function to remove shares of the ID and convert to outstanding LP tokens.
+  function _removeShare(uint256 id, uint256 closeShare) internal {
+    uint256 share = shares[id];
+
+    if (share >= closeShare) {
+      ITokenVault(tokenVault).withdraw(farmToken, closeShare, address(this));
+      totalShare = SafeMathLib.sub(totalShare, closeShare, "worker:totalShare");
+      shares[id] = SafeMathLib.sub(shares[id], closeShare, "worker:sub shares");
+      emit RemoveShare(id, closeShare);
+    } else {
+      _removeShare(id);
     }
   }
 
@@ -247,5 +264,49 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
 
   function setTwapInterval(uint32 _twapDuration) external onlyOwner {
     twapDuration = _twapDuration;
+  }
+
+  function getChainLinkPrice(address token0, address token1) public view returns (uint256, uint256) {
+    require(
+        address(priceFeeds[token0][token1]) != address(0) || address(priceFeeds[token1][token0]) != address(0),
+        "chainLink::getPrice no source"
+    );
+    bool isRaised = chainlinkFlags.getFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
+    if (isRaised) {
+        // If flag is raised we shouldn't perform any critical operations
+        revert("Chainlink feeds are not being updated");
+    }
+    if (address(priceFeeds[token0][token1]) != address(0)) {
+        (, int256 price, , uint256 lastUpdate, ) = priceFeeds[token0][token1].latestRoundData();
+        uint256 decimals = uint256(priceFeeds[token0][token1].decimals());
+        return (SafeMathLib.div(SafeMathLib.mul(uint256(price), 1e18), (10**decimals)), lastUpdate);
+    }
+    (, int256 price, , uint256 lastUpdate, ) = priceFeeds[token1][token0].latestRoundData();
+    uint256 decimals = uint256(priceFeeds[token1][token0].decimals());
+    return (SafeMathLib.div(SafeMathLib.mul((10**decimals), 1e18), uint256(price)), lastUpdate);
+  }
+
+  function setPriceFeed(
+      address token0,
+      address token1,
+      IAggregatorV3Interface source
+  ) external onlyOwner {
+      require(
+          address(priceFeeds[token0][token1]) == address(0),
+          "source on existed pair"
+      );
+      priceFeeds[token0][token1] = source;
+  }
+
+  function getLastPrice(address token0, address token1) public view returns (uint256) {
+      if (farmToken == token0) {
+          (uint price0,) = getChainLinkPrice(token0, usd);
+          (uint price1,) = getChainLinkPrice(usd, token1);
+          return SafeMathLib.div(SafeMathLib.mul(price0, price1), 1e18);
+      } else {
+          (uint price0,) = getChainLinkPrice(usd, token0);
+          (uint price1,) = getChainLinkPrice(token1, usd);
+          return SafeMathLib.div(SafeMathLib.mul(price0, price1), 1e18);
+      }
   }
 }

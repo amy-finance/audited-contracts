@@ -36,8 +36,9 @@ contract StrategyWithdrawTrading is OwnableUpgradeSafe, ReentrancyGuardUpgradeSa
       address farmToken,
       address router,
       bytes memory _path,
+      uint256 amountIn,
       uint256 amountOutMin
-    ) = abi.decode(_swapData, (address, address, address, bytes, uint256));
+    ) = abi.decode(_swapData, (address, address, address, bytes, uint256, uint256));
 
     // 1. Approve router to do their stuffs
     farmToken.safeApprove(router, uint256(-1));
@@ -47,13 +48,14 @@ contract StrategyWithdrawTrading is OwnableUpgradeSafe, ReentrancyGuardUpgradeSa
         path: _path,
         recipient: address(this),
         deadline: now,
-        amountIn: farmToken.myBalance(),
+        amountIn: amountIn,
         amountOutMinimum: amountOutMin
     }));
 
     require(baseToken.myBalance() > 0, "swap baseToken is zero");
     // 3. Transfer Farm Token to Vault
     baseToken.safeTransfer(msg.sender, baseToken.myBalance());
+    farmToken.safeTransfer(msg.sender, farmToken.myBalance());
 
     // 4. Reset approval for safety reason
     farmToken.safeApprove(router, 0);

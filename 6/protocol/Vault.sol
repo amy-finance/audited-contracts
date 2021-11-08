@@ -10,7 +10,6 @@ import "./interfaces/IVault.sol";
 import "../utils/SafeToken.sol";
 import "./WNativeRelayer.sol";
 import "./FToken.sol";
-import "hardhat/console.sol";
 
 contract Vault is IVault, FToken, OwnableUpgradeSafe {
 
@@ -41,6 +40,7 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
     address worker;
     address owner;
     uint256 debtShare;
+    uint256 id;
   }
 
   struct WorkEntity {
@@ -199,7 +199,9 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
     if (id == 0) {
       id = nextPositionID++;
       pos = positions[id];
+      pos.id = id;
       pos.worker = workEntity.worker;
+      require(userToPositions[msg.sender][pos.worker].debtShare == 0, "user has position");
       pos.owner = msg.sender;
     } else {
       pos = positions[id];
@@ -256,7 +258,7 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
 
   /// @dev Kill the given to the position. Liquidate it immediately if killFactor condition is met.
   /// @param id The position ID to be killed.
-  /// @param swapData Swap token data in the DODO protocol.
+  /// @param swapData Swap token data in the dex protocol.
   function kill(uint256 id, bytes calldata swapData) external onlyEOA accrue(0) nonReentrant {
     Position storage pos = positions[id];
     require(pos.debtShare > 0, "kill:: no debt");
@@ -266,20 +268,22 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
     uint256 killFactor = config.killFactor(pos.worker, debt);
     require(health.mul(killFactor) < debt.mul(10000), "kill:: can't liquidate");
 
-    uint256 beforeToken = SafeToken.myBalance(token);
-    IWorker(pos.worker).liquidateWithData(id, swapData);
-    uint256 back = SafeToken.myBalance(token).sub(beforeToken);
+    uint back;
+    {
+      uint256 beforeToken = SafeToken.myBalance(token);
+      IWorker(pos.worker).liquidateWithData(id, swapData);
+      back = SafeToken.myBalance(token).sub(beforeToken);
+    }
     // 5% of the liquidation value will become a Clearance Fees
     uint256 clearanceFees = back.mul(config.getKillBps()).div(10000);
     // 30% for liquidator reward
     uint256 prize = clearanceFees.mul(securityFactor).div(10000);
     // 30% for $AMY token stakers reward
-    // 30% to be converted to $AMY/USDT LP Pair on DoDo
+    // 30% to be converted to $AMY/USDT LP Pair on Dex
     // 10% to security fund
     uint256 securityFund = clearanceFees.sub(prize);
 
     uint256 rest = back.sub(clearanceFees);
-
     // Clear position debt and return funds to liquidator and position owner.
     if (prize > 0) {
       if (token == config.getWrappedNativeAddr()) {
@@ -295,6 +299,11 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
       totalReserves = totalReserves.add(securityFund);
     }
 
+    uint lessDebt = Math.min(debt, back);
+    debt = SafeMathLib.sub(debt, lessDebt, "debt");
+    if (debt > 0) {
+      _addDebt(id, debt);
+    }
     uint256 left = rest > debt ? rest - debt : 0;
     if (left > 0) {
       if (token == config.getWrappedNativeAddr()) {
@@ -320,6 +329,8 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
     positionToLoan[id] = loan;
     borrowInternalForLeverage(pos.worker, loan);
 
+    userToPositions[msg.sender][pos.worker].debtShare = pos.debtShare;
+
     emit AddDebt(id, debtShare);
   }
 
@@ -335,6 +346,8 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
 
       repayInternalForLeverage(pos.worker, positionToLoan[id]);
       positionToLoan[id] = 0;
+
+      userToPositions[msg.sender][pos.worker].debtShare = pos.debtShare;
 
       emit RemoveDebt(id, debtShare);
       return debtVal;
@@ -353,6 +366,8 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
   receive() external payable {}
 
   mapping (address => bool) public isOldFarmMigrated;
+  // user => worker => position
+  mapping (address => mapping (address => Position)) public userToPositions;
 
   event OldFarmDataMigrated(address _sender, uint256 _amount, address _oldFarm, address _newFarm);
 

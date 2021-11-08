@@ -5,7 +5,6 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts-ethereum-package/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts-ethereum-package/contracts/math/SafeMath.sol";
 
-import "../interfaces/IWorker.sol";
 import "../interfaces/IWorkerConfig.sol";
 import "../IPriceOracle.sol";
 import "../../utils/SafeToken.sol";
@@ -49,7 +48,7 @@ contract WorkerConfig is OwnableUpgradeSafe, IWorkerConfig {
   }
 
   /// @dev Return whether the given worker is stable, presumably not under manipulation.
-  function isStable(address /*worker*/) public pure returns (bool) {
+  function isStable(address worker) public view returns (bool) {
     return true;
   }
 
