@@ -118,7 +118,7 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
       _initialInterestRateModel,
       _token,
       _borrowSafeRatio,
-      _name, _symbol, _decimals, _arbSys
+      _name, _symbol, _arbSys
     );
 
     nextPositionID = 1;

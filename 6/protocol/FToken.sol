@@ -138,7 +138,6 @@ contract FToken is Exponential {
         uint256 _borrowSafeRatio,
         string memory _name,
         string memory _symbol,
-        uint8 _decimals,
         address _arbSys
     ) internal {
         initialExchangeRate = _initialExchangeRate;
@@ -152,7 +151,7 @@ contract FToken is Exponential {
         borrowIndex = ONE;
         name = _name;
         symbol = _symbol;
-        decimals = _decimals;
+        decimals = 18;
         _notEntered = true;
         securityFactor = 100;
     }
