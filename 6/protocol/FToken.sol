@@ -473,22 +473,14 @@ contract FToken is Exponential {
         return abi.encode(dls);
     }
 
-    function depositInternal(uint256 amount) public payable {
-        this._deposit{value: msg.value}(amount, msg.sender);
+    function depositToken(uint256 amount) public payable whenUnpaused {
+        bytes memory flog = mint(msg.sender, amount);
+        this.transferIn{value: msg.value}(msg.sender, underlying, amount);
+        this.addTotalCash(amount);
+        emit MonitorEvent("Deposit", flog);
 
         (address farm, uint256 poolId) = config.getFarmConfig(address(this));
         IFarm(farm).stake(poolId, msg.sender, amount);
-    }
-
-    // User deposit
-    function _deposit(
-        uint256 amount,
-        address account
-    ) external payable whenUnpaused {
-        bytes memory flog = mint(account, amount);
-        this.transferIn{value: msg.value}(account, underlying, amount);
-        addTotalCash(amount);
-        emit MonitorEvent("Deposit", flog);
     }
 
     struct BorrowLocals {

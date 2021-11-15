@@ -173,7 +173,7 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
 
   /// @dev Add more token to the lending pool. Hope to get some good returns.
   function deposit(uint256 amountToken) external override payable {
-    depositInternal(amountToken);
+    depositToken(amountToken);
   }
 
   /// @dev Withdraw token from the lending and burning ibToken.
