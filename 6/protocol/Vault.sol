@@ -63,8 +63,8 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
   /// Get token from msg.sender
   modifier transferTokenToVault(uint256 value) {
     if (msg.value != 0) {
-      require(token == config.getWrappedNativeAddr(), "transferTokenToVault:: baseToken is not wNative");
-      require(value == msg.value, "transferTokenToVault:: value != msg.value");
+      require(token == config.getWrappedNativeAddr(), "baseToken is not wNative");
+      require(value == msg.value, "value != msg.value");
       IWETH(config.getWrappedNativeAddr()).deposit{value: msg.value}();
     } else {
       SafeToken.safeTransferFrom(token, msg.sender, address(this), value);
@@ -185,7 +185,7 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
   /// @param id The ID of the position to unlock the earning. Use ZERO for new position.
   /// @param workEntity The amount of Token to borrow from the pool.
   /// @param data The calldata to pass along to the worker for more working context.
-  /// @param swapData dodo swap data
+  /// @param swapData Dex swap data
   function work(
     uint id,
     WorkEntity calldata workEntity,
@@ -215,7 +215,7 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
     (STRATEGY, ) = abi.decode(data, (address, bytes));
 
     require(config.isWorker(workEntity.worker), "Vault::work:: not a worker");
-    require(workEntity.loan == 0 || config.acceptDebt(workEntity.worker), "Vault::work:: worker not accept more debt");
+    require(workEntity.loan == 0 || config.acceptDebt(workEntity.worker), "worker not accept more debt");
     beforeLoan = positionToLoan[id];
     uint256 debt = _removeDebt(id).add(workEntity.loan);
     afterLoan = beforeLoan.add(workEntity.loan);
@@ -223,7 +223,7 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
     uint back;
     {
       uint256 sendBEP20 = workEntity.principalAmount.add(workEntity.loan);
-      require(sendBEP20 <= SafeToken.myBalance(token), "Vault::work:: insufficient funds in the vault");
+      require(sendBEP20 <= SafeToken.myBalance(token), "insufficient funds in the vault");
       uint256 beforeBEP20 = SafeMathLib.sub(SafeToken.myBalance(token), sendBEP20, "beforeBEP20");
       SafeToken.safeTransfer(token, workEntity.worker, sendBEP20);
       IWorker(workEntity.worker).workWithData(id, msg.sender, debt, data, swapData);
@@ -233,7 +233,7 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
     uint lessDebt = Math.min(debt, back);
     debt = SafeMathLib.sub(debt, lessDebt, "debt");
     if (debt > 0) {
-      require(debt >= config.minDebtSize(), "Vault::work:: too small debt size");
+      require(debt >= config.minDebtSize(), "Vault::work too small debt size");
       uint256 health = IWorker(workEntity.worker).health(id);
       uint256 workFactor = config.workFactor(workEntity.worker, debt);
       require(health.mul(workFactor) >= debt.mul(10000), "Vault::work:: bad work factor");
