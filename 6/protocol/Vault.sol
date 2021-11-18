@@ -224,6 +224,11 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
 
     uint back;
     {
+      if (workEntity.principalAmount > 0) {
+        PositionRecord storage record;
+        record = userToPositionRecord[msg.sender][pos.worker];
+        record.deposit = record.deposit.add(workEntity.principalAmount);
+      }
       uint256 sendBEP20 = workEntity.principalAmount.add(workEntity.loan);
       require(sendBEP20 <= SafeToken.myBalance(token), "insufficient funds in the vault");
       uint256 beforeBEP20 = SafeMathLib.sub(SafeToken.myBalance(token), sendBEP20, "beforeBEP20");
@@ -255,6 +260,14 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
       } else {
         SafeToken.safeTransfer(token, msg.sender, back.sub(lessDebt));
       }
+      PositionRecord storage record;
+      record = userToPositionRecord[msg.sender][pos.worker];
+      record.withdraw = record.withdraw.add(back.sub(lessDebt));
+    }
+
+    if (IWorker(workEntity.worker).getShares(id) == 0) {
+      userToPositionRecord[msg.sender][pos.worker].deposit = 0;
+      userToPositionRecord[msg.sender][pos.worker].withdraw = 0;
     }
   }
 
@@ -316,6 +329,10 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
         SafeToken.safeTransfer(token, pos.owner, left);
       }
     }
+    if (IWorker(pos.worker).getShares(pos.id) == 0) {
+      userToPositionRecord[msg.sender][pos.worker].deposit = 0;
+      userToPositionRecord[msg.sender][pos.worker].withdraw = 0;
+    }
     emit Kill(id, msg.sender, pos.owner, health, debt, prize, left);
   }
 
@@ -370,6 +387,14 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
   mapping (address => bool) public isOldFarmMigrated;
   // user => worker => position
   mapping (address => mapping (address => Position)) public userToPositions;
+  // user => worker => positionId
+  mapping (address => mapping (address => uint256)) public userToPositionId;
+
+  struct PositionRecord {
+    uint256 deposit;
+    uint256 withdraw;
+  }
+  mapping (address => mapping (address => PositionRecord)) public userToPositionRecord;
 
   event OldFarmDataMigrated(address _sender, uint256 _amount, address _oldFarm, address _newFarm);
 

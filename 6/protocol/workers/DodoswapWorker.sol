@@ -253,4 +253,8 @@ contract DodoswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWork
     liqStrat = _liqStrat;
   }
 
+  function getShares(uint256 id) external view override returns(uint256) {
+    return shares[id];
+  }
+
 }

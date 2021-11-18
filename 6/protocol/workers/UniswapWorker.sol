@@ -309,4 +309,8 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
           return SafeMathLib.div(SafeMathLib.mul(price0, price1), 1e18);
       }
   }
+
+  function getShares(uint256 id) external view override returns(uint256) {
+    return shares[id];
+  }
 }
