@@ -203,6 +203,8 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
       pos.id = id;
       pos.worker = workEntity.worker;
       pos.owner = msg.sender;
+      userToPositions[msg.sender][pos.worker] = pos;
+      userToPositionId[msg.sender][pos.worker] = id;
     } else {
       pos = positions[id];
       require(id < nextPositionID, "Vault::work:: bad position id");
