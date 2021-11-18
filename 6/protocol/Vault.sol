@@ -18,7 +18,7 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
 
   event AddDebt(uint256 indexed id, uint256 debtShare);
   event RemoveDebt(uint256 indexed id, uint256 debtShare);
-  event Work(uint256 indexed id, uint256 principal, uint256 loan);
+  event Work(uint256 indexed id, address worker, uint256 principal, uint256 loan, uint256 health, uint256 shares, uint256 deposit, uint256 withdraw);
   event Kill(uint256 indexed id, address indexed killer, address owner, uint256 posVal, uint256 debt, uint256 prize, uint256 left);
 
   /// @dev Flags for manage execution scope
@@ -211,7 +211,6 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
       require(pos.worker == workEntity.worker, "Vault::work:: bad position worker");
       require(pos.owner == msg.sender, "Vault::work:: not position owner");
     }
-    emit Work(id, workEntity.principalAmount, workEntity.loan);
 
     POSITION_ID = id;
     (STRATEGY, ) = abi.decode(data, (address, bytes));
@@ -269,6 +268,17 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
       userToPositionRecord[msg.sender][pos.worker].deposit = 0;
       userToPositionRecord[msg.sender][pos.worker].withdraw = 0;
     }
+
+    emit Work(
+      pos.id, 
+      pos.worker,
+      workEntity.principalAmount, 
+      workEntity.loan, 
+      IWorker(pos.worker).health(pos.id),
+      IWorker(pos.worker).getShares(pos.id),
+      userToPositionRecord[msg.sender][pos.worker].deposit,
+      userToPositionRecord[msg.sender][pos.worker].withdraw
+    );
   }
 
   /// @dev Kill the given to the position. Liquidate it immediately if killFactor condition is met.
