@@ -197,11 +197,11 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
   {
     Position storage pos;
     if (id == 0) {
+      require(userToPositionId[msg.sender][workEntity.worker] == 0, "user has position");
       id = nextPositionID++;
       pos = positions[id];
       pos.id = id;
       pos.worker = workEntity.worker;
-      require(userToPositions[msg.sender][pos.worker].debtShare == 0, "user has position");
       pos.owner = msg.sender;
     } else {
       pos = positions[id];
