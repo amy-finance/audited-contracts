@@ -159,10 +159,11 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
     uint256 token0Decimal = IERC20(baseToken).decimals();
     uint256 token1Decimal = IERC20(farmToken).decimals();
 
-    uint256 price0 = getLastPrice(baseToken, farmToken);
-    // farmToken -> baseToken
-    uint256 amount = SafeMathLib.mul(price0, positions);
-    uint256 receiveBaseAmount = SafeMathLib.div(amount, 10**token1Decimal);
+    uint256 price0 = getLastPrice(farmToken, baseToken);
+    // farmToken -> baseToken  price0 decimal equal 1e18
+    uint256 baseTokenAmount = SafeMathLib.mul(price0, positions);
+    uint256 tmpAmount = SafeMathLib.mul(baseTokenAmount, 10**token0Decimal);
+    uint256 receiveBaseAmount = SafeMathLib.div(SafeMathLib.div(tmpAmount, 10**token1Decimal), 1e18);
     return receiveBaseAmount;
   }
 
@@ -291,10 +292,6 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
       address token1,
       IAggregatorV3Interface source
   ) external onlyOwner {
-      require(
-          address(priceFeeds[token0][token1]) == address(0),
-          "source on existed pair"
-      );
       priceFeeds[token0][token1] = source;
   }
 
@@ -304,8 +301,8 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
           (uint price1,) = getChainLinkPrice(usd, token1);
           return SafeMathLib.div(SafeMathLib.mul(price0, price1), 1e18);
       } else {
-          (uint price0,) = getChainLinkPrice(usd, token0);
-          (uint price1,) = getChainLinkPrice(token1, usd);
+          (uint price0,) = getChainLinkPrice(usd, token1);
+          (uint price1,) = getChainLinkPrice(token0, usd);
           return SafeMathLib.div(SafeMathLib.mul(price0, price1), 1e18);
       }
   }
