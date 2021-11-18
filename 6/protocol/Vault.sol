@@ -18,7 +18,7 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
 
   event AddDebt(uint256 indexed id, uint256 debtShare);
   event RemoveDebt(uint256 indexed id, uint256 debtShare);
-  event Work(uint256 indexed id, uint256 loan);
+  event Work(uint256 indexed id, uint256 principal, uint256 loan);
   event Kill(uint256 indexed id, address indexed killer, address owner, uint256 posVal, uint256 debt, uint256 prize, uint256 left);
 
   /// @dev Flags for manage execution scope
@@ -209,7 +209,7 @@ contract Vault is IVault, FToken, OwnableUpgradeSafe {
       require(pos.worker == workEntity.worker, "Vault::work:: bad position worker");
       require(pos.owner == msg.sender, "Vault::work:: not position owner");
     }
-    emit Work(id, workEntity.loan);
+    emit Work(id, workEntity.principalAmount, workEntity.loan);
 
     POSITION_ID = id;
     (STRATEGY, ) = abi.decode(data, (address, bytes));
