@@ -19,7 +19,7 @@ import "../interfaces/IFlagInterface.sol";
 import "../interfaces/univ3/IUniswapV3Pool.sol";
 import "../interfaces/univ3/IUniswapV3Factory.sol";
 import "../interfaces/univ3/ISwapRouter.sol";
-
+import "hardhat/console.sol";
 interface ITokenVault {
   function deposit(address _token, uint _amount) external;
   function withdraw(address _token, uint256 _amount, address _receiver) external;
@@ -292,6 +292,10 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
       address token1,
       IAggregatorV3Interface source
   ) external onlyOwner {
+      require(
+          address(priceFeeds[token0][token1]) == address(0),
+          "source on existed pair"
+      );
       priceFeeds[token0][token1] = source;
   }
 
@@ -301,13 +305,13 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
           (uint price1,) = getChainLinkPrice(usd, token1);
           return SafeMathLib.div(SafeMathLib.mul(price0, price1), 1e18);
       } else {
-          (uint price0,) = getChainLinkPrice(usd, token1);
-          (uint price1,) = getChainLinkPrice(token0, usd);
+          (uint price0,) = getChainLinkPrice(usd, token0);
+          (uint price1,) = getChainLinkPrice(token1, usd);
           return SafeMathLib.div(SafeMathLib.mul(price0, price1), 1e18);
       }
   }
 
-  function getShares(uint256 id) external view override returns(uint256) {
+  function getShares(uint256 id) external override view returns (uint256) {
     return shares[id];
   }
 }

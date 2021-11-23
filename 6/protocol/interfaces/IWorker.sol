@@ -2,7 +2,7 @@
 pragma solidity 0.6.6;
 
 interface IWorker {
-  /// @dev For dex  
+  /// @dev For dodo  
   function workWithData(uint256 id, address user, uint256 debt, bytes calldata data, bytes calldata swapData) external;
 
   /// @dev Return the amount of ETH wei to get back if we are to liquidate the position.
@@ -14,6 +14,6 @@ interface IWorker {
   /// @dev SetStretegy that be able to executed by the worker.
   function setStrategyOk(address[] calldata strats, bool isOk) external;
 
-  /// @dev Positon Shares
+  /// @dev Position shares
   function getShares(uint256 id) external view returns(uint256);
 }

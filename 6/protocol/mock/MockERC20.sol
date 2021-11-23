@@ -17,4 +17,8 @@ contract MockERC20 is ERC20UpgradeSafe, OwnableUpgradeSafe {
   function mint(address to, uint256 amount) public onlyOwner {
     _mint(to, amount);
   }
+
+  function set(uint8 _decimals) public onlyOwner {
+    _setupDecimals(_decimals);
+  }
 }

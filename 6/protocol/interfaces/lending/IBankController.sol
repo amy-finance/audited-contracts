@@ -71,6 +71,7 @@ interface IBankController {
     ) external;
 
     function marketsContains(address fToken) external view returns (bool);
+    function vaultContains(address vault) external view returns (bool);
 
     function seizeCheck(address cTokenCollateral, address cTokenBorrowed)
         external;

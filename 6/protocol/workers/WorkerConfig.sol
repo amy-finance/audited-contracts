@@ -48,7 +48,7 @@ contract WorkerConfig is OwnableUpgradeSafe, IWorkerConfig {
   }
 
   /// @dev Return whether the given worker is stable, presumably not under manipulation.
-  function isStable(address worker) public view returns (bool) {
+  function isStable(address worker) public pure returns (bool) {
     return true;
   }
 

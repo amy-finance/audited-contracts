@@ -65,6 +65,10 @@ contract BankController is Exponential, OwnableUpgradeSafe {
         return allFtokenMarkets[fToken];
     }
 
+    function vaultContains(address vault) public view returns (bool) {
+        return allVaults[vault];
+    }
+
     address public pauser;
     bool public paused;
 
@@ -139,6 +143,7 @@ contract BankController is Exponential, OwnableUpgradeSafe {
 
     // fToken => supported or not, using mapping to save gas instead of iterator array
     mapping (address => bool) public allFtokenMarkets;
+    mapping (address => bool) public allVaults;
     event SetAllFtokenMarkets(bytes data);
 
     // fToken => exchangeUnit, to save gas instead of runtime calc
@@ -479,6 +484,10 @@ contract BankController is Exponential, OwnableUpgradeSafe {
 
         allFtokenMarkets[address(fToken)] = true;
         allFtokenExchangeUnits[address(fToken)] = _calcExchangeUnit(address(fToken));
+    }
+
+    function supportVault(address _vault, bool _isSupport) external onlyAdmin {
+        allVaults[_vault] = _isSupport;
     }
 
     function addTokenToMarket(address underlying, address fToken) internal {
