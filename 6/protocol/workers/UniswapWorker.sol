@@ -292,10 +292,6 @@ contract UniswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWorke
       address token1,
       IAggregatorV3Interface source
   ) external onlyOwner {
-      require(
-          address(priceFeeds[token0][token1]) == address(0),
-          "source on existed pair"
-      );
       priceFeeds[token0][token1] = source;
   }
 
