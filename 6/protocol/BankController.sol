@@ -9,7 +9,6 @@ import "./interfaces/lending/IFToken.sol";
 import "./interfaces/lending/IOracle.sol";
 import "./interfaces/lending/IERC20.sol";
 import "./library/SafeERC20.sol";
-import "./RewardType.sol";
 import "./library/SafeMathLib.sol";
 import "./library/Address.sol";
 import "./interfaces/lending/IRewardPool.sol";
@@ -43,7 +42,7 @@ contract BankController is Exponential, OwnableUpgradeSafe {
 
     // underlying => market
     mapping(address => Market) public markets;
-    mapping(uint256 => uint256) public rewardFactors; // RewardType ==> rewardFactor (1e18 scale);
+    // mapping(uint256 => uint256) public rewardFactors; // RewardType ==> rewardFactor (1e18 scale);
     mapping(address => IFToken[]) public accountAssets;
 
     IFToken[] public allMarkets;
