@@ -422,7 +422,6 @@ contract Vault is IVault, Exponential, OwnableUpgradeSafe {
       positionToLoan[id] = 0;
 
       userToPositions[msg.sender][pos.worker].debtShare = pos.debtShare;
-      userToPositionId[msg.sender][pos.worker] = _NO_ID;
 
       emit RemoveDebt(id, debtShare);
       return debtVal;
