@@ -98,21 +98,18 @@ contract DodoswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWork
     dodoSellHelper = _dodoSellHelper;
   }
 
-  /// 需要是一个EOA账户, 避免闪电贷攻击
   /// @dev Require that the caller must be an EOA account to avoid flash loans.
   modifier onlyEOA() {
     require(msg.sender == tx.origin, "DodoswapWorker::onlyEOA:: not eoa");
     _;
   }
 
-  /// 只有操作者才能调用
   /// @dev Require that the caller must be the operator.
   modifier onlyOperator() {
     require(msg.sender == operator, "DodoswapWorker::onlyOperator:: not operator");
     _;
   }
 
-  /// 操作给定的仓位，必须是操作者才能调用
   /// @dev Work on the given position. Must be called by the operator.
   /// @param id The position ID to work on.
   /// @param user The original user that is interacting with the operator.
@@ -127,10 +124,8 @@ contract DodoswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWork
   )
     override external onlyOperator nonReentrant
   {
-    // 1. 将这个仓位转换为 shares
     _removeShare(id);
 
-    // 2. 解析出策略 和 附加数据
     (address strat, bytes memory ext) = abi.decode(data, (address, bytes));
     require(okStrats[strat], "DodoWorker:: unapproved work strategy");
 
@@ -142,14 +137,11 @@ contract DodoswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWork
     }
     IStrategy(strat).executeWithData(user, debt, ext, swapData);
 
-    // 3. 把 Farming tokens 放到资金池中
     _addShare(id);
 
-    // 4. 将剩余的BaseToken返还给操作者, 找零操作
     baseToken.safeTransfer(msg.sender, baseToken.myBalance());
   }
 
-  /// 如果我们要清算给定头寸，则返回能接收到的BaseToken的数量
   /// @dev Return the amount of BaseToken to receive if we are to liquidate the given position.
   /// @param id The position ID to perform health check.
   function health(uint256 id) external override view returns (uint256) {
@@ -169,20 +161,17 @@ contract DodoswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWork
     return 0;
   }
 
-  /// 清算指定的头寸, 转换成BaseToken返回给调用者
   /// @dev Liquidate the given position by converting it to BaseToken and return back to caller.
   /// @param id The position ID to perform liquidation
   /// @param swapData Swap token data in the DODO protocol.
   function liquidateWithData(uint256 id, bytes calldata swapData) external override onlyOperator nonReentrant {
 
-    // 1. 把仓位的份额换算成LP tokens 并用清算策略进行清算
     // 1. Convert the position back to LP tokens and use liquidate strategy.
     _removeShare(id);
 
     farmingToken.safeTransfer(address(liqStrat), farmingToken.balanceOf(address(this)));
     liqStrat.executeWithData(address(0), 0, abi.encode(baseToken, farmingToken, 0), swapData);
 
-    // 2. 把所有可用的BaseToken都返回给操作者
     // 2. Return all available BaseToken back to the operator.
     uint256 wad = baseToken.myBalance();
     baseToken.safeTransfer(msg.sender, wad);
@@ -190,35 +179,29 @@ contract DodoswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWork
     emit Liquidate(id, wad);
   }
 
-  /// 内部函数, 添加指定ID的池子的份额
   /// @dev Internal function to stake all outstanding LP tokens to the given position ID.
   function _addShare(uint256 id) internal {
     uint256 balance = farmingToken.balanceOf(address(this));
     if (balance > 0) {
-      // 1. 给tokenVault合约授权
       // 1. Approve token to be spend by tokenVault
       address(farmingToken).safeApprove(address(tokenVault), uint256(-1));
 
-      // 2. 把余额转换为份额
       // 2. Convert balance to share
       uint256 share = balance;
-      // 3. 将余额充值到tokenVault合约中
+
       // 3. Deposit balance to tokenVault
       ITokenVault(tokenVault).deposit(farmingToken, balance);
 
-      // 4. 更新份额
       // 4. Update shares
       shares[id] = SafeMathLib.add(shares[id], share);
       totalShare = SafeMathLib.add(totalShare, share);
 
-      // 5. 复位token的授权
       // 5. Reset approve token
       address(farmingToken).safeApprove(address(tokenVault), 0);
       emit AddShare(id, share);
     }
   }
 
-  /// 内部函数，减少指定ID的池子的份额
   /// @dev Internal function to remove shares of the ID and convert to outstanding LP tokens.
   function _removeShare(uint256 id) internal {
     uint256 share = shares[id];
@@ -231,7 +214,6 @@ contract DodoswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWork
     }
   }
 
-  /// 设置策略授权状态
   /// @dev Set the given strategies' approval status.
   /// @param strats The strategy addresses.
   /// @param isOk Whether to approve or unapprove the given strategies.
@@ -244,7 +226,6 @@ contract DodoswapWorker is OwnableUpgradeSafe, ReentrancyGuardUpgradeSafe, IWork
 
   // ========================================
 
-  /// 设置危机策略, 不好的策略能够窃取资金
   /// @dev Update critical strategy smart contracts. EMERGENCY ONLY. Bad strategies can steal funds.
   /// @param _addStrat The new add strategy contract.
   /// @param _liqStrat The new liquidate strategy contract.
